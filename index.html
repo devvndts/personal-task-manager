@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trình Quản Lý Nhiệm Vụ Cá Nhân</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet"/>
+  <style>
+    body{background:#f8f9fa}
+    .table-hover>tbody>tr:hover {background-color:#f1f3f5}
+    .cursor-pointer{cursor:pointer}
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+      <span class="navbar-brand mb-0 h1">Trình Quản Lý Nhiệm Vụ</span>
+      <button class="btn btn-primary" id="addTaskBtn"><i class="bi bi-plus-lg"></i> Thêm nhiệm vụ</button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="row g-3 mb-3">
+      <div class="col-md-4 col-sm-6">
+        <input type="text" class="form-control" id="searchInput" placeholder="Tìm kiếm nhiệm vụ..." />
+      </div>
+      <div class="col-md-2 col-sm-6">
+        <select class="form-select" id="statusFilter">
+          <option value="all">Tất cả trạng thái</option>
+          <option value="incomplete">Chưa hoàn thành</option>
+          <option value="complete">Đã hoàn thành</option>
+        </select>
+      </div>
+      <div class="col-md-2 col-sm-6">
+        <select class="form-select" id="priorityFilter">
+          <option value="all">Tất cả độ ưu tiên</option>
+          <option value="high">Cao</option>
+          <option value="medium">Trung bình</option>
+          <option value="low">Thấp</option>
+        </select>
+      </div>
+      <div class="col-md-2 col-sm-6">
+        <select class="form-select" id="sortSelect">
+          <option value="dateAsc">Ngày đến hạn ↑</option>
+          <option value="dateDesc">Ngày đến hạn ↓</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-bordered table-hover align-middle" id="tasksTable">
+        <thead class="table-secondary">
+          <tr>
+            <th>Nhiệm vụ</th>
+            <th>Độ ưu tiên</th>
+            <th>Ngày đến hạn</th>
+            <th class="text-center">Trạng thái</th>
+            <th class="text-center">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="modal fade" id="taskModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form id="taskForm">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalTitle">Thêm nhiệm vụ</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="taskId" />
+            <div class="mb-3">
+              <label for="titleInput" class="form-label">Tiêu đề<span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="titleInput" required />
+            </div>
+            <div class="mb-3">
+              <label for="descInput" class="form-label">Mô tả</label>
+              <textarea class="form-control" id="descInput" rows="3"></textarea>
+            </div>
+            <div class="mb-3">
+              <label for="dateInput" class="form-label">Ngày đến hạn<span class="text-danger">*</span></label>
+              <input type="date" class="form-control" id="dateInput" required />
+            </div>
+            <div class="mb-3">
+              <label for="priorityInput" class="form-label">Độ ưu tiên<span class="text-danger">*</span></label>
+              <select class="form-select" id="priorityInput" required>
+                <option value="high">Cao</option>
+                <option value="medium" selected>Trung bình</option>
+                <option value="low">Thấp</option>
+              </select>
+            </div>
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="statusInput" />
+              <label class="form-check-label" for="statusInput">Đã hoàn thành</label>
+            </div>
+            <div class="text-danger small" id="formError"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+            <button type="submit" class="btn btn-primary">Lưu</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const STORAGE_KEY = "ptm_tasks";
+    const taskModalEl = document.getElementById("taskModal");
+    const bsModal = new bootstrap.Modal(taskModalEl);
+    const taskForm = document.getElementById("taskForm");
+    const taskIdInput = document.getElementById("taskId");
+    const titleInput = document.getElementById("titleInput");
+    const descInput = document.getElementById("descInput");
+    const dateInput = document.getElementById("dateInput");
+    const priorityInput = document.getElementById("priorityInput");
+    const statusInput = document.getElementById("statusInput");
+    const formError = document.getElementById("formError");
+    const modalTitle = document.getElementById("modalTitle");
+    const searchInput = document.getElementById("searchInput");
+    const statusFilter = document.getElementById("statusFilter");
+    const priorityFilter = document.getElementById("priorityFilter");
+    const sortSelect = document.getElementById("sortSelect");
+    const addTaskBtn = document.getElementById("addTaskBtn");
+    const tasksTableBody = document.querySelector("#tasksTable tbody");
+
+    let tasks = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+
+    function saveTasks() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    }
+
+    function badge(priority) {
+      const map = { high: ["danger", "Cao"], medium: ["warning text-dark", "Trung bình"], low: ["success", "Thấp"] };
+      return `<span class="badge bg-${map[priority][0]}">${map[priority][1]}</span>`;
+    }
+
+    function renderTasks() {
+      const q = searchInput.value.toLowerCase();
+      const stat = statusFilter.value;
+      const pri = priorityFilter.value;
+
+      let filtered = tasks.filter(t => {
+        const matchSearch = t.title.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q);
+        const matchStatus = stat === 'all' || (stat === 'complete' ? t.completed : !t.completed);
+        const matchPri = pri === 'all' || t.priority === pri;
+        return matchSearch && matchStatus && matchPri;
+      });
+
+      filtered.sort((a, b) => sortSelect.value === 'dateAsc' ? new Date(a.dueDate) - new Date(b.dueDate) : new Date(b.dueDate) - new Date(a.dueDate));
+
+      tasksTableBody.innerHTML = filtered.map(t => `
+        <tr>
+          <td>${t.title}</td>
+          <td>${badge(t.priority)}</td>
+          <td>${t.dueDate}</td>
+          <td class="text-center">
+            <button class="btn btn-sm ${t.completed ? 'btn-success' : 'btn-outline-secondary'} status-toggle" data-id="${t.id}" title="Chuyển trạng thái">
+              ${t.completed ? '<i class="bi bi-check-lg"></i>' : '<i class="bi bi-circle"></i>'}
+            </button>
+          </td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-outline-primary edit-btn" data-id="${t.id}"><i class="bi bi-pencil"></i></button>
+            <button class="btn btn-sm btn-outline-danger delete-btn ms-1" data-id="${t.id}"><i class="bi bi-trash"></i></button>
+          </td>
+        </tr>`).join("");
+    }
+
+    function openModal(task = null) {
+      formError.textContent = "";
+      if (task) {
+        modalTitle.textContent = "Chỉnh sửa nhiệm vụ";
+        taskIdInput.value = task.id;
+        titleInput.value = task.title;
+        descInput.value = task.description || "";
+        dateInput.value = task.dueDate;
+        priorityInput.value = task.priority;
+        statusInput.checked = task.completed;
+      } else {
+        modalTitle.textContent = "Thêm nhiệm vụ";
+        taskIdInput.value = "";
+        taskForm.reset();
+        priorityInput.value = "medium";
+      }
+      bsModal.show();
+    }
+
+    addTaskBtn.addEventListener("click", () => openModal());
+
+    tasksTableBody.addEventListener("click", e => {
+      const id = e.target.closest("button")?.dataset.id;
+      if (!id) return;
+      if (e.target.closest(".status-toggle")) toggleStatus(id);
+      if (e.target.closest(".edit-btn")) openModal(tasks.find(t => t.id === id));
+      if (e.target.closest(".delete-btn")) deleteTask(id);
+    });
+
+    function toggleStatus(id) {
+      tasks = tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
+      saveTasks();
+      renderTasks();
+    }
+
+    function deleteTask(id) {
+      if (!confirm("Bạn có chắc chắn muốn xóa nhiệm vụ này không?")) return;
+      const task = tasks.find(t => t.id === id);
+      tasks = tasks.filter(t => t.id !== id);
+      saveTasks();
+      renderTasks();
+      if (confirm("Đã xóa. Hoàn tác?")) {
+        tasks.push(task);
+        saveTasks();
+        renderTasks();
+      }
+    }
+
+    taskForm.addEventListener("submit", e => {
+      e.preventDefault();
+      formError.textContent = "";
+      const id = taskIdInput.value || Date.now().toString();
+      const title = titleInput.value.trim();
+      const description = descInput.value.trim();
+      const dueDate = dateInput.value;
+      const priority = priorityInput.value;
+      const completed = statusInput.checked;
+
+      if (!title) {
+        formError.textContent = "Tiêu đề không được để trống.";
+        return;
+      }
+
+      const today = new Date().toISOString().split("T")[0];
+      if (dueDate < today) {
+        formError.textContent = "Ngày đến hạn phải từ hôm nay trở đi.";
+        return;
+      }
+
+      const obj = { id, title, description, dueDate, priority, completed };
+      if (taskIdInput.value) {
+        tasks = tasks.map(t => t.id === id ? obj : t);
+      } else {
+        tasks.push(obj);
+      }
+      saveTasks();
+      bsModal.hide();
+      renderTasks();
+    });
+
+    [searchInput, statusFilter, priorityFilter, sortSelect].forEach(el => el.addEventListener("input", renderTasks));
+
+    renderTasks();
+  </script>
+</body>
+</html>
